@@ -1,0 +1,154 @@
+import os
+from openai import AzureOpenAI
+
+import requests
+import json
+import time
+
+
+def generate_image():
+    # You will need to set these environment variables or edit the following values.
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "https://hub1234886090677.openai.azure.com/")
+    api_version = os.getenv("OPENAI_API_VERSION", "2024-04-01-preview")
+    deployment = os.getenv("DEPLOYMENT_NAME", "dall-e-3")
+    api_key = os.getenv("AZURE_OPENAI_API_KEY", "4pWxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2")
+
+    # Initialize the client
+    client = AzureOpenAI(
+        api_version=api_version,
+        azure_endpoint=endpoint,
+        api_key=api_key,
+     )
+
+    # Get prompt from user
+    prompt = input("Please enter your image description: ")
+   
+    if not prompt:
+        print("No prompt provided. Using default prompt.")
+        prompt = "a beautiful sunrise over mountains"
+   
+    print(f"Generating image for: {prompt}...")
+   
+    try:
+        # Generate the image
+        result = client.images.generate(
+            model=deployment,
+            prompt=prompt,
+            n=1,
+            style="vivid",
+            quality="standard",
+        )
+       
+        # Get the image URL
+        image_url = result.data[0].url
+        print("\nImage generated successfully!")
+        print(f"Image URL: {image_url}")
+        print("\nYou can download the image by:")
+        print(f"1. Right-clicking the URL and selecting 'Save link as...'")
+        print(f"2. Or opening the URL in your browser and saving the image")
+       
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+def generate_video_from_prompt():
+    """
+    This function takes a user prompt and generates a video using Azure OpenAI's video generation API.
+    """
+    # Get user input for the video prompt
+    prompt = input("Enter your video prompt: ")
+    n_seconds = input("Enter video duration in seconds (default: 5): ") or "5"
+    height = input("Enter video height in pixels (default: 480): ") or "480"
+    width = input("Enter video width in pixels (default: 854): ") or "854"
+    
+    # Set up API configuration (you can modify these or set as environment variables)
+    endpoint = "Azure-Endpoint"
+    deployment = "sora"
+    subscription_key = "" #"Azure-KEY"
+    api_version = "preview"
+    
+    # Construct the API URL
+    path = 'openai/v1/video/generations/jobs'
+    params = f'?api-version={api_version}'
+    constructed_url = endpoint + path + params
+
+    headers = {
+        'Api-Key': subscription_key,
+        'Content-Type': 'application/json',
+    }
+
+    body = {
+        "prompt": prompt,
+        "n_variants": "1",
+        "n_seconds": n_seconds,
+        "height": height,
+        "width": width,
+        "model": deployment,
+    }
+
+    print("\n🚀 Starting video generation...")
+    job_response = requests.post(constructed_url, headers=headers, json=body)
+    
+    if not job_response.ok:
+        print("Video generation failed.")
+        print(json.dumps(job_response.json(), sort_keys=True, indent=4, separators=(',', ': ')))
+        return
+    
+    job_response = job_response.json()
+    job_id = job_response.get("id")
+    status = job_response.get("status")
+    status_url = f"{endpoint}openai/v1/video/generations/jobs/{job_id}?api-version={api_version}"
+
+    print(f"\n⏳ Polling job status for ID: {job_id}")
+    while status not in ["succeeded", "failed"]:
+        time.sleep(5)
+        job_response = requests.get(status_url, headers=headers).json()
+        status = job_response.get("status")
+        print(f"Current status: {status}")
+
+    if status == "succeeded":
+        generations = job_response.get("generations", [])
+        if generations:
+            print("\n✅ Video generation succeeded!")
+            generation_id = generations[0].get("id")
+            video_url = f'{endpoint}openai/v1/video/generations/{generation_id}/content/video{params}'
+            
+            # Download the video
+            video_response = requests.get(video_url, headers=headers)
+            if video_response.ok:
+                output_filename = input("\nEnter output filename (default: output.mp4): ") or "output.mp4"
+                if not output_filename.endswith('.mp4'):
+                    output_filename += '.mp4'
+                
+                with open(output_filename, "wb") as file:
+                    file.write(video_response.content)
+                print(f'\n🎥 Generated video saved as "{output_filename}"')
+            else:
+                print("❌ Failed to download the generated video.")
+        else:
+            print("⚠️ Status is succeeded, but no generations were returned.")
+    elif status == "failed":
+        print("\n❌ Video generation failed.")
+        print(json.dumps(job_response, sort_keys=True, indent=4, separators=(',', ': ')))
+
+
+if __name__ == "__main__":
+   
+   print(f'\n To generate image press 1, To generate video press 2')
+   v = int(input('Enter 1 or 2  '))
+   while  v >= 0 or v < 0:
+   	if v == 1:
+		generate_image()
+		break
+   	elif v == 2:
+   		generate_video_from_prompt()
+		break
+   	else: 
+		print(f'\n To generate image press 1, To generate video press 2')
+		v = int(input('Enter 1 or 2  '))
+  		continue
+
+
+
+
+
